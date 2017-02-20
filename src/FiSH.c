@@ -111,7 +111,7 @@ int FiSH_encrypt(const SERVER_REC * serverRec, const char *msgPtr,
     }
 
     strcpy(bf_dest, "+OK ");
-    encrypt_string(iniValue.key, msgPtr, bf_dest + 4, strlen(msgPtr));
+    encrypt_string_cbc(iniValue.key, msgPtr, bf_dest + 4, strlen(msgPtr));
 
     freeIni(iniValue);
     return 1;
@@ -175,7 +175,7 @@ int FiSH_decrypt(const SERVER_REC * serverRec, char *msg_ptr,
             mark_broken_block = 1;
     }
 
-    decrypt_string(iniValue.key, msg_ptr, bf_dest, msg_len);
+    decrypt_string_cbc(iniValue.key, msg_ptr, bf_dest, msg_len);
     freeIni(iniValue);
 
     if (*bf_dest == '\0')

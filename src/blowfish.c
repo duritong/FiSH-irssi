@@ -75,6 +75,59 @@ encrypt_string (const char *key, const char *str, char *dest, int len)
     *dest++ = 0;
     return 1;
 }
+    int
+encrypt_string_cbc(const char *key, const char *str, char *dest, int len)
+{
+    char iv[BF_BLOCK];
+    BF_KEY bf_key;
+    int i;
+    int isIv = 1;
+
+    //for(i=0; i<8; i++) iv[i] = 'i';
+    RAND_bytes(iv, BF_BLOCK);
+
+    if (!key || !key[0])
+        return 0;
+
+    BF_set_key (&bf_key, strlen (key), (const unsigned char *) key);
+
+    while (len > 0)
+    {
+        const size_t blocksize = len < 8 ? len : BF_BLOCK;
+        unsigned char block[BF_BLOCK] = { 0 }; /* pad with zero */
+        uint32_t v;
+        size_t i;
+
+        if (isIv == 1) {
+            memcpy (block, iv, blocksize);
+        } else {
+            memcpy (block, str, blocksize);
+            BF_cbc_encrypt(block, block, BF_BLOCK, &bf_key, iv, BF_ENCRYPT);
+        }
+
+        for (v = load32_be (block + 4), i = 0; i < 6; ++i)
+        {
+            *dest++ = B64[v & 0x3f];
+            v >>= 6;
+        }
+
+        for (v = load32_be (block + 0), i = 0; i < 6; ++i)
+        {
+            *dest++ = B64[v & 0x3f];
+            v >>= 6;
+        }
+
+        if (isIv == 1) {
+            isIv = 0;
+        } else {
+            len -= blocksize;
+            str += blocksize;
+        }
+    }
+
+    *dest++ = 0;
+    return 1;
+}
 
     int
 decrypt_string (const char *key, const char *str, char *dest, int len)
@@ -114,6 +167,53 @@ decrypt_string (const char *key, const char *str, char *dest, int len)
     *dest++ = 0;
     return 1;
 }
+
+    int
+decrypt_string_cbc(const char *key, const char *str, char *dest, int len)
+{
+    BF_KEY bf_key;
+    char iv[BF_BLOCK];
+    uint32_t v;
+    size_t i;
+    int isKey = 1;
+
+    /* Pad encoded string with 0 bits in case it's bogus */
+    if (!key || !key[0])
+        return 0;
+
+    /* length must be a multiple of BF_BLOCK encoded in base64 */
+    if (len % (BF_BLOCK * 6 / 4) != 0)
+        return 0;
+
+    BF_set_key (&bf_key, strlen (key), (const unsigned char *) key);
+    while (len > 0)
+    {
+        unsigned char block[BF_BLOCK] = { 0 };
+
+        for (i = v = 0; i < 6; ++i)
+            v |= base64dec (*str++) << (i * 6);
+        store32_be (block + 4, v);
+
+        for (i = v = 0; i < 6; ++i)
+            v |= base64dec (*str++) << (i * 6);
+        store32_be (block + 0, v);
+
+        if (isKey == 1) {
+            memcpy(iv, block, BF_BLOCK);
+            isKey = 0;
+        } else {
+            BF_cbc_encrypt (block, block, BF_BLOCK, &bf_key, iv, BF_DECRYPT);
+            memcpy (dest, block, BF_BLOCK);
+            dest += BF_BLOCK;
+        }
+
+        len -= BF_BLOCK * 6 / 4;
+    }
+
+    *dest++ = 0;
+    return 1;
+}
+
 
     void
 encrypt_key (const char *key, char *encryptedKey)
